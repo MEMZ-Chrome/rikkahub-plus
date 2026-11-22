@@ -187,6 +187,9 @@ class SettingsStore internal constructor(
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
 
+        // 首页自定义短语
+        val HOME_PROMPT_CONFIG = stringPreferencesKey("home_prompt_config")
+
         // Uses the same DataStore singleton without starting settings flows or requiring Koin.
         internal suspend fun restoreBeforeInitialization(context: Context, settings: Settings, launchCount: Int) {
             require(!settings.init) { "Cannot restore uninitialized settings" }

@@ -1,6 +1,11 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,6 +69,7 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.model.withConversation
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.service.HomePromptItem
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
@@ -106,6 +112,9 @@ fun ChatList(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
+    homePrompt: HomePromptItem? = null,
+    showHomePrompt: Boolean = false,
+    onClickHomePrompt: (HomePromptItem) -> Unit = {},
 ) {
     val previewProgress = rememberPreviewSwipeProgress(previewMode)
     val scope = rememberCoroutineScope()
@@ -165,6 +174,9 @@ fun ChatList(
                 onToolAnswer = onToolAnswer,
                 onToggleFavorite = onToggleFavorite,
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
+                homePrompt = homePrompt,
+                showHomePrompt = showHomePrompt,
+                onClickHomePrompt = onClickHomePrompt,
                 selectionState = selectionState,
             )
         }
@@ -237,6 +249,9 @@ private fun ChatListNormal(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
+    homePrompt: HomePromptItem? = null,
+    showHomePrompt: Boolean = false,
+    onClickHomePrompt: (HomePromptItem) -> Unit = {},
     selectionState: ChatSelectionState,
 ) {
     val scope = rememberCoroutineScope()
@@ -463,6 +478,34 @@ private fun ChatListNormal(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
+            val captureProgress = LocalScrollCaptureInProgress.current
+            var lastHomePrompt by remember(conversation.id) { mutableStateOf<HomePromptItem?>(null) }
+            if (homePrompt != null) {
+                lastHomePrompt = homePrompt
+            }
+
+            // 新对话且输入框为空时在正中心显示自定义短语与小图；后台静默刷新换新时淡入淡出切换
+            AnimatedVisibility(
+                visible = showHomePrompt && homePrompt != null && !captureProgress,
+                enter = fadeIn() + scaleIn(initialScale = 0.96f),
+                exit = fadeOut() + scaleOut(targetScale = 0.96f),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 32.dp),
+            ) {
+                Crossfade(
+                    targetState = lastHomePrompt,
+                    label = "home_prompt_crossfade",
+                ) { item ->
+                    if (item != null) {
+                        HomePromptBanner(
+                            item = item,
+                            onClick = { onClickHomePrompt(item) },
+                        )
+                    }
+                }
+            }
+
             // 错误消息卡片
             ErrorCardsDisplay(
                 errors = errors,
@@ -499,8 +542,6 @@ private fun ChatListNormal(
                 selectedMessages = conversation.messageNodes.filter { it.id in selectedItems }
                     .map { it.currentMessage }
             )
-
-            val captureProgress = LocalScrollCaptureInProgress.current
 
             // 消息快速跳转
             MessageJumper(

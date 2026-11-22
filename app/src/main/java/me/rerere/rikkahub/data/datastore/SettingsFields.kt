@@ -179,6 +179,9 @@ internal val SETTINGS_FIELDS: List<SettingsField<*, *>> = with(SettingsStore) {
 
         // 赞助提醒
         plain(SPONSOR_ALERT_DISMISSED_AT, Settings::sponsorAlertDismissedAt) { copy(sponsorAlertDismissedAt = it) },
+
+        // 首页自定义短语
+        json(HOME_PROMPT_CONFIG, Settings::homePromptConfig) { copy(homePromptConfig = it) },
     )
 }
 

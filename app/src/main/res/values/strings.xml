@@ -1960,4 +1960,16 @@
   <string name="quick_start_card_desc">RikkaHub needs a model provider to chat. Follow the quick start to set up a provider and default model, or migrate your chat history from DeepSeek.</string>
   <string name="setting_page_quick_start">Quick Start</string>
   <string name="setting_page_quick_start_desc">Set up providers and models step by step, or migrate from DeepSeek</string>
+  <string name="setting_home_prompt_title">Home Prompt</string>
+  <string name="setting_home_prompt_entry_desc">Show a custom image and phrase in the center of a new empty chat, tap to fill the input</string>
+  <string name="setting_home_prompt_status_on">On</string>
+  <string name="setting_home_prompt_status_off">Off</string>
+  <string name="setting_home_prompt_enable_title">Enable Home Prompt</string>
+  <string name="setting_home_prompt_enable_desc">Floats in the center of a new empty chat, renders from local cache first and refreshes silently on launch/resume; stays completely hidden when nothing is fetched</string>
+  <string name="setting_home_prompt_script_title">Custom JS Script</string>
+  <string name="setting_home_prompt_script_desc">Implement getHomePrompt() (sync or async). Use fetch(url, options?) and return { image, phrase, prompt } (image accepts a URL, [light, dark], or { light, dark } for images, GIF, SVG, or .riv animations). Return null or an empty object to hide.</string>
+  <string name="setting_home_prompt_insert_example">Insert example</string>
+  <string name="setting_home_prompt_test_title">Test &amp; Preview</string>
+  <string name="setting_home_prompt_test_run">Test</string>
+  <string name="setting_home_prompt_test_empty">Returned empty; nothing will be shown on the home screen</string>
 </resources>

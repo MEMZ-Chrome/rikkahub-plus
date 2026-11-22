@@ -126,6 +126,8 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            // rive-android 等多个原生依赖都会打包 libc++_shared.so，避免合并冲突
+            pickFirsts += "**/libc++_shared.so"
         }
         resources {
             // BouncyCastle 的 Picnic 后量子签名查找表（约 1.2MB），JSch 用不到
@@ -197,6 +199,8 @@ configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configu
 
 dependencies {
     implementation(libs.quickjs)
+    // 首页自定义短语支持 .riv 动效（懒加载初始化，未使用 .riv 时不加载原生库）
+    implementation(libs.rive.android)
     // Phone Use 的 Shizuku 执行方式：api 是客户端，provider 负责接收 Shizuku 传来的 binder
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)

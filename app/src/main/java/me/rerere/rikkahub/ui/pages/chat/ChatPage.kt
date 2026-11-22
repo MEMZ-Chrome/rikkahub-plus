@@ -306,6 +306,10 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     val workspaceRepository: WorkspaceRepository = koinInject()
     val sessionActivity by vm.sessionActivity.collectAsStateWithLifecycle()
+    val homePrompt by vm.homePrompt.collectAsStateWithLifecycle()
+    val isInputEmpty by remember(inputState) {
+        derivedStateOf { inputState.textContent.text.isEmpty() && inputState.messageContent.isEmpty() }
+    }
 
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val selectionState = rememberChatSelectionState()
@@ -524,6 +528,15 @@ private fun ChatPageContent(
                 },
                 onConversationSystemPromptChange = { newPrompt ->
                     vm.updateConversationSystemPrompt(newPrompt)
+                },
+                homePrompt = homePrompt,
+                showHomePrompt = conversation.messageNodes.isEmpty() && loadingJob == null && isInputEmpty,
+                onClickHomePrompt = { item ->
+                    val textToInsert = item.insertText
+                    if (textToInsert.isNotBlank()) {
+                        inputState.editingMessage = null
+                        inputState.setMessageText(textToInsert)
+                    }
                 },
             )
         }

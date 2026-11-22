@@ -47,9 +47,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.ChatFontFamily
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.data.files.FileFolders
@@ -57,9 +60,11 @@ import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
 import me.rerere.rikkahub.ui.components.ui.CardGroupValue
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
 import me.rerere.rikkahub.ui.components.ui.switchItem
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
@@ -71,6 +76,7 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
     val context = LocalContext.current
+    val navController = LocalNavController.current
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     val chatFontFamily = rememberChatFontFamily(displaySetting)
@@ -129,6 +135,49 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                val homePromptActive = settings.homePromptConfig.enabled && settings.homePromptConfig.script.isNotBlank()
+                CardGroup {
+                    item(
+                        onClick = { navController.navigate(Screen.SettingHomePrompt) },
+                        leadingContent = {
+                            CardGroupIcon(
+                                icon = HugeIcons.Sparkles,
+                                containerColor = if (homePromptActive) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                                contentColor = if (homePromptActive) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        },
+                        headlineContent = { Text(stringResource(R.string.setting_home_prompt_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_home_prompt_entry_desc)) },
+                        trailingContent = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                CardGroupValue(
+                                    stringResource(
+                                        if (homePromptActive) {
+                                            R.string.setting_home_prompt_status_on
+                                        } else {
+                                            R.string.setting_home_prompt_status_off
+                                        }
+                                    )
+                                )
+                                Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                            }
+                        },
+                    )
+                }
+            }
+
             item {
                 CardGroup(
                     title = { Text(stringResource(R.string.setting_page_message_display_settings)) },

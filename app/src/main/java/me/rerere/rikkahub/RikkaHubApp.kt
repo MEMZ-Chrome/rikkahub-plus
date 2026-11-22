@@ -38,6 +38,7 @@ import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
+import me.rerere.rikkahub.service.HomePromptManager
 import me.rerere.rikkahub.service.MediaCreationService
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
@@ -117,6 +118,9 @@ class RikkaHubApp : Application() {
         resumeMediaCreations()
         resumeMemoryConsolidation()
 
+        // Start home prompt local cache loading and foreground silent refresh
+        startHomePromptSync()
+
         // Increment launch count
         incrementLaunchCount()
 
@@ -147,6 +151,18 @@ class RikkaHubApp : Application() {
                 Log.e(TAG, "resumeMemoryConsolidation failed", it)
             }
         }
+    }
+
+    private fun startHomePromptSync() {
+        val manager = get<HomePromptManager>()
+        manager.start()
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_START) {
+                    manager.onAppForeground()
+                }
+            }
+        )
     }
 
     private fun incrementLaunchCount() {

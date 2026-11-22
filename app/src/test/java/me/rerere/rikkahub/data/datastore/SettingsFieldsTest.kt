@@ -168,6 +168,7 @@ private val SAMPLE = Settings(
     webServerLocalhostOnly = true,
     backupReminderConfig = BackupReminderConfig(enabled = true),
     sponsorAlertDismissedAt = 7,
+    homePromptConfig = HomePromptConfig(enabled = true, script = "function getHomePrompt() { return null; }"),
 )
 
 private val STORED_KEYS = setOf(
@@ -223,4 +224,5 @@ private val STORED_KEYS = setOf(
     "quick_messages",
     "backup_reminder_config",
     "sponsor_alert_dismissed_at",
+    "home_prompt_config",
 )

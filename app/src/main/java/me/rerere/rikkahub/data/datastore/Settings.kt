@@ -91,6 +91,8 @@ data class Settings(
     val phoneUseBlockedApps: List<String> = emptyList(),
     // Phone Use 的执行方式：无障碍服务、Shizuku、root
     val phoneUseBackend: PhoneUseBackend = PhoneUseBackend.ACCESSIBILITY,
+    // 首页空对话正中心展示的小图、短语及点击填入的提示词（通过自定义 JS 获取）
+    val homePromptConfig: HomePromptConfig = HomePromptConfig(),
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
@@ -210,3 +212,37 @@ data class BackupReminderConfig(
     val intervalDays: Int = 7,
     val lastBackupTime: Long = 0L,
 )
+
+@Serializable
+data class HomePromptConfig(
+    val enabled: Boolean = false,
+    val script: String = "",
+) {
+    companion object {
+        const val DEFAULT_SCRIPT = """// Implement getHomePrompt() function (sync or async)
+// Use fetch(url, options?) for HTTP requests
+// fetch() returns { status, ok, text(), json() }
+// Return {
+//   image?: string | [lightUrl, darkUrl] | { light?: string, dark?: string },
+//   phrase?: string,
+//   prompt?: string,
+//   isRive?: boolean // optional; URLs ending with .riv are auto-detected
+// }
+// Supports PNG/JPG/WebP/GIF/SVG and Rive (.riv) animations
+// Return null or an empty object to display nothing on the home screen
+
+function getHomePrompt() {
+  const res = fetch("https://example.com/home-prompt");
+  if (!res.ok) return null;
+  const data = res.json();
+  return {
+    image: {
+      light: data.lightImage || data.image || "",
+      dark: data.darkImage || ""
+    },
+    phrase: data.phrase || "",
+    prompt: data.prompt || ""
+  };
+}"""
+    }
+}

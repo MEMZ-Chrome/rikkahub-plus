@@ -11,6 +11,9 @@ import me.rerere.rikkahub.service.BackgroundShellManager
 import me.rerere.rikkahub.service.ChatFloatingTracker
 import me.rerere.rikkahub.service.ChatNotificationManager
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.HomePromptManager
+import me.rerere.rikkahub.service.HomePromptRiveLoader
+import me.rerere.rikkahub.service.HomePromptService
 import me.rerere.rikkahub.service.MediaCreationService
 import me.rerere.rikkahub.ui.floating.ChatFloatingWindows
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalSessionManager
@@ -44,6 +47,31 @@ val appModule = module {
         UpdateChecker(
             client = get(),
             appScope = get(),
+        )
+    }
+
+    single {
+        HomePromptRiveLoader(
+            context = get(),
+            httpClient = get(),
+        )
+    }
+
+    single {
+        HomePromptService(
+            httpClient = get(),
+            json = get(),
+        )
+    }
+
+    single {
+        HomePromptManager(
+            context = get(),
+            appScope = get(),
+            settingsStore = get(),
+            service = get(),
+            riveLoader = get(),
+            json = get(),
         )
     }
 

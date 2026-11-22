@@ -13,6 +13,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +45,8 @@ import me.rerere.rikkahub.service.BackgroundShellManager
 import me.rerere.rikkahub.service.BackgroundShellTask
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.HomePromptItem
+import me.rerere.rikkahub.service.HomePromptManager
 import me.rerere.rikkahub.service.SessionActivity
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
@@ -64,6 +67,7 @@ class ChatVM(
     private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
     private val backgroundShellManager: BackgroundShellManager,
+    private val homePromptManager: HomePromptManager,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
@@ -95,13 +99,35 @@ class ChatVM(
         .getConversationJobs()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    private val _conversationInitialized = MutableStateFlow(false)
+
+    // 用户设置
+    val settings: StateFlow<Settings> =
+        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
+
+    // 优先直接展示本地缓存内容；等会话初始化完成确认是空的新对话后才显示，避免打开历史对话时闪烁
+    val homePrompt: StateFlow<HomePromptItem?> = combine(
+        _conversationInitialized,
+        conversation.map { it.messageNodes.isEmpty() }.distinctUntilChanged(),
+        homePromptManager.currentPrompt,
+    ) { initialized, isEmptyConversation, item ->
+        if (initialized && isEmptyConversation) item else null
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     init {
         // 添加对话引用
         chatService.addConversationReference(_conversationId)
 
         // 初始化对话
         viewModelScope.launch {
-            chatService.initializeConversation(_conversationId)
+            try {
+                chatService.initializeConversation(_conversationId)
+            } finally {
+                _conversationInitialized.value = true
+                if (conversation.value.messageNodes.isEmpty()) {
+                    homePromptManager.refreshIfStale()
+                }
+            }
         }
 
         // 记住对话ID, 方便下次启动恢复
@@ -114,10 +140,6 @@ class ChatVM(
         // 移除对话引用
         chatService.removeConversationReference(_conversationId)
     }
-
-    // 用户设置
-    val settings: StateFlow<Settings> =
-        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
     // 流式输出时会话每个 chunk 都在变，助手和模型只取决于下面这几个字段
     private val configuredConversation = conversation.distinctUntilChanged { old, new ->
