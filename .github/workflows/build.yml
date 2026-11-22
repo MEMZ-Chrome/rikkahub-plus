@@ -12,7 +12,7 @@ permissions:
 
 env:
   # Release 说明里会写「基于上游哪个版本构建」，合并上游后记得改这里
-  UPSTREAM_BASE: RikkaHub v3.3.0
+  UPSTREAM_BASE: RikkaHub v3.3.1
 
 jobs:
   build:

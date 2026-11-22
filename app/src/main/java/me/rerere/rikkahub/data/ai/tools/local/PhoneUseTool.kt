@@ -4,9 +4,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -43,6 +46,9 @@ private const val LONG_PRESS_MS = 700L
 private const val SWIPE_MS = 350L
 private const val SCREENSHOT_MAX_SIDE = 1568
 
+// 应用刚被拉起时系统还在绑定无障碍服务，稍等一下再判定服务没在运行
+private const val SERVICE_CONNECT_WAIT_MS = 2000L
+
 private val ACTIONS = listOf(
     "observe", "screenshot", "tap", "long_press", "swipe", "scroll", "type", "press", "open_app", "list_apps", "wait",
 )
@@ -55,6 +61,7 @@ fun phoneUseActionOf(input: String): String? = runCatching {
 /**
  * [saveScreenshot] 把 JPEG 存成聊天文件并返回地址；[isSelfInForeground] 判断本应用是否在前台，单测里替换。
  * [blockedApps] 是用户在设置里禁用的包名，每次调用时重新读取；默认不限制任何应用。
+ * [isCheckedInSystem] 是系统无障碍设置里有没有勾选，用来区分「没开」和「开了但被系统停掉」。
  * [backend] 是用户选的执行方式（无障碍 / Shizuku / root），同样每次调用时重新读取。
  */
 internal fun buildPhoneUseTool(
@@ -63,11 +70,19 @@ internal fun buildPhoneUseTool(
     saveScreenshot: (ByteArray) -> String,
     isFloatingWindowOn: () -> Boolean,
     blockedApps: () -> Set<String> = { emptySet() },
+    isCheckedInSystem: () -> Boolean = { false },
     isSelfInForeground: suspend () -> Boolean = ::isAppInForeground,
     backend: () -> PhoneUseBackend = { PhoneUseBackend.ACCESSIBILITY },
 ): Tool {
     val session = PhoneUseSession(
-        ownPackageName, manager, saveScreenshot, isFloatingWindowOn, blockedApps, isSelfInForeground, backend
+        ownPackageName = ownPackageName,
+        manager = manager,
+        saveScreenshot = saveScreenshot,
+        isFloatingWindowOn = isFloatingWindowOn,
+        blockedApps = blockedApps,
+        isCheckedInSystem = isCheckedInSystem,
+        isSelfInForeground = isSelfInForeground,
+        backend = backend,
     )
     return Tool(
         name = PHONE_USE_TOOL_NAME,
@@ -147,6 +162,7 @@ private class PhoneUseSession(
     private val saveScreenshot: (ByteArray) -> String,
     private val isFloatingWindowOn: () -> Boolean,
     private val blockedApps: () -> Set<String>,
+    private val isCheckedInSystem: () -> Boolean,
     private val isSelfInForeground: suspend () -> Boolean,
     private val backend: () -> PhoneUseBackend,
 ) {
@@ -156,6 +172,20 @@ private class PhoneUseSession(
     // 元素编号和坐标换算都以模型最后看到的那份为准
     private var lastScreen: PhoneScreen? = null
 
+    private suspend fun awaitAccessibilityController(): PhoneController {
+        check(isCheckedInSystem()) {
+            "Phone Use is not enabled. Ask the user to turn on \"RikkaHub Phone Use\" in the system accessibility settings."
+        }
+        return withTimeoutOrNull(SERVICE_CONNECT_WAIT_MS) {
+            manager.controllers.mapNotNull { it[PhoneUseBackend.ACCESSIBILITY] }.first()
+        } ?: error(
+            "\"RikkaHub Phone Use\" is on in the system accessibility settings, but the system has stopped the service " +
+                "(some phones do this when the app is swiped away from recent apps) and will not restart it by itself. " +
+                "Ask the user to turn it off and on again in the accessibility settings. To keep it from happening again, " +
+                "they can lock RikkaHub in recent apps and allow it to auto-start."
+        )
+    }
+
     suspend fun execute(params: JsonObject): List<UIMessagePart> = mutex.withLock {
         // 开启工具时已经要求过，这里防的是之后又把悬浮窗或它的权限关掉
         check(isFloatingWindowOn()) {
@@ -163,21 +193,19 @@ private class PhoneUseSession(
                 "Ask them to turn it on in Settings > Notifications (and grant the overlay permission) first."
         }
         val selected = backend()
-        val controller = manager.controllerFor(selected) ?: error(
-            when (selected) {
-                PhoneUseBackend.ACCESSIBILITY ->
-                    "Phone Use is not enabled. Ask the user to turn on \"RikkaHub Phone Use\" " +
-                        "in the system accessibility settings."
+        val controller = manager.controllerFor(selected) ?: when (selected) {
+            PhoneUseBackend.ACCESSIBILITY -> awaitAccessibilityController()
 
-                PhoneUseBackend.SHIZUKU ->
-                    "Shizuku is not available. Ask the user to install and start Shizuku, " +
-                        "authorize this app in it, then pick Shizuku again in Settings > Assistant > Local tools."
+            PhoneUseBackend.SHIZUKU -> error(
+                "Shizuku is not available. Ask the user to install and start Shizuku, " +
+                    "authorize this app in it, then pick Shizuku again in Settings > Assistant > Local tools."
+            )
 
-                PhoneUseBackend.ROOT ->
-                    "Root is not available. Ask the user to grant root access to this app, " +
-                        "or switch Phone Use to another backend in Settings > Assistant > Local tools."
-            }
-        )
+            PhoneUseBackend.ROOT -> error(
+                "Root is not available. Ask the user to grant root access to this app, " +
+                    "or switch Phone Use to another backend in Settings > Assistant > Local tools."
+            )
+        }
         when (val action = params.string("action") ?: error("action is required")) {
             "list_apps" -> {
                 val blocked = blockedApps()

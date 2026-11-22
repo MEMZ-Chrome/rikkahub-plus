@@ -23,7 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.ui.toast.ToastType
@@ -59,6 +59,7 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.phoneuse.PhoneUseBackend
 import me.rerere.rikkahub.phoneuse.PhoneUseManager
+import me.rerere.rikkahub.phoneuse.isPhoneUseCheckedInSystem
 import me.rerere.rikkahub.phoneuse.isFloatingChatWindowOn
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -135,9 +136,14 @@ private fun AssistantLocalToolContent(
     val shizukuInstalled = remember(context) {
         runCatching { context.packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0) }.isSuccess
     }
-
-    // 进页面探一次 Shizuku / root，用户可能刚在系统里授权过
-    LaunchedEffect(Unit) { phoneUseManager.refreshShells() }
+    // 系统设置里勾选着但无障碍服务没连上：被系统停掉了，要关掉重开。从系统设置或 Shizuku 回来时重新检查
+    var phoneUseCheckedInSystem by remember { mutableStateOf(isPhoneUseCheckedInSystem(context)) }
+    LifecycleResumeEffect(Unit) {
+        phoneUseCheckedInSystem = isPhoneUseCheckedInSystem(context)
+        scope.launch { phoneUseManager.refreshShells() }
+        onPauseOrDispose {}
+    }
+    val phoneUseServiceStopped = !phoneUseControllers.containsKey(PhoneUseBackend.ACCESSIBILITY) && phoneUseCheckedInSystem
 
     // 用户在 Shizuku 的授权框里点了允许之后刷新状态
     DisposableEffect(Unit) {
@@ -155,6 +161,8 @@ private fun AssistantLocalToolContent(
         stringResource(R.string.assistant_page_local_tools_phone_use_floating_window_required)
     val chooseBackendText = stringResource(R.string.assistant_page_local_tools_phone_use_choose_backend)
     val backendNotReadyText = stringResource(R.string.assistant_page_local_tools_phone_use_backend_not_ready_toast)
+    val enableServiceText = stringResource(R.string.assistant_page_local_tools_phone_use_enable_service)
+    val restartServiceText = stringResource(R.string.assistant_page_local_tools_phone_use_restart_service)
     // Android 11 以下没有无障碍截图接口，用户授权录屏后才有画面
     val screenCaptureActive = phoneUseManager.screenCaptureActive.collectAsStateWithLifecycle().value
     val screenCaptureRequired = Build.VERSION.SDK_INT < Build.VERSION_CODES.R
@@ -335,10 +343,15 @@ private fun AssistantLocalToolContent(
                             if (LocalToolOption.PhoneUse in assistant.localTools && !phoneUseServiceOn) {
                                 Text(
                                     text = stringResource(
-                                        if (phoneUseBackend == PhoneUseBackend.ACCESSIBILITY) {
-                                            R.string.assistant_page_local_tools_phone_use_service_off
-                                        } else {
-                                            R.string.assistant_page_local_tools_phone_use_backend_off
+                                        when {
+                                            phoneUseBackend == PhoneUseBackend.ACCESSIBILITY && phoneUseServiceStopped ->
+                                                R.string.assistant_page_local_tools_phone_use_service_stopped
+
+                                            phoneUseBackend == PhoneUseBackend.ACCESSIBILITY ->
+                                                R.string.assistant_page_local_tools_phone_use_service_off
+
+                                            else ->
+                                                R.string.assistant_page_local_tools_phone_use_backend_off
                                         }
                                     ),
                                     color = MaterialTheme.colorScheme.error,
@@ -482,6 +495,7 @@ private fun AssistantLocalToolContent(
             selected = phoneUseBackend,
             controllers = phoneUseControllers,
             shizukuInstalled = shizukuInstalled,
+            accessibilityStopped = phoneUseServiceStopped,
             onSelect = { backend ->
                 showBackendSheet = false
                 scope.launch {
@@ -492,6 +506,10 @@ private fun AssistantLocalToolContent(
             },
             onOpenAccessibility = {
                 showBackendSheet = false
+                toaster.show(
+                    message = if (phoneUseServiceStopped) restartServiceText else enableServiceText,
+                    type = ToastType.Warning,
+                )
                 context.openAccessibilitySettings()
             },
             onAuthorizeShizuku = {

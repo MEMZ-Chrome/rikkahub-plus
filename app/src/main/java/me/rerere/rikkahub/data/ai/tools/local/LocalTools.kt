@@ -7,6 +7,7 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.phoneuse.PhoneUseManager
 import me.rerere.rikkahub.phoneuse.isFloatingChatWindowOn
+import me.rerere.rikkahub.phoneuse.isPhoneUseCheckedInSystem
 import me.rerere.tts.provider.TTSManager
 
 class LocalTools(
@@ -41,6 +42,7 @@ class LocalTools(
             manager = phoneUseManager,
             isFloatingWindowOn = { isFloatingChatWindowOn(context, settingsStore.settingsFlow.value) },
             blockedApps = { settingsStore.settingsFlow.value.phoneUseBlockedApps.toSet() },
+            isCheckedInSystem = { isPhoneUseCheckedInSystem(context) },
             // 用户可能随时在设置里换执行方式，每次调用现读
             backend = { settingsStore.settingsFlow.value.phoneUseBackend },
             saveScreenshot = { bytes ->

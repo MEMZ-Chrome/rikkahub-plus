@@ -31,6 +31,7 @@ internal fun PhoneUseBackendSheet(
     selected: PhoneUseBackend,
     controllers: Map<PhoneUseBackend, PhoneController>,
     shizukuInstalled: Boolean,
+    accessibilityStopped: Boolean,
     onSelect: (PhoneUseBackend) -> Unit,
     onOpenAccessibility: () -> Unit,
     onAuthorizeShizuku: () -> Unit,
@@ -102,8 +103,13 @@ internal fun PhoneUseBackendSheet(
                 ) {
                     Text(
                         text = when (selected) {
-                            PhoneUseBackend.ACCESSIBILITY ->
-                                stringResource(R.string.assistant_page_local_tools_phone_use_enable_service)
+                            PhoneUseBackend.ACCESSIBILITY -> stringResource(
+                                if (accessibilityStopped) {
+                                    R.string.assistant_page_local_tools_phone_use_restart_service
+                                } else {
+                                    R.string.assistant_page_local_tools_phone_use_enable_service
+                                }
+                            )
 
                             PhoneUseBackend.SHIZUKU -> stringResource(
                                 if (shizukuInstalled) {

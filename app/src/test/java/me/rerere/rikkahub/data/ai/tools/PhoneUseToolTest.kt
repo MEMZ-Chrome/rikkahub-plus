@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
@@ -27,12 +29,14 @@ class PhoneUseToolTest {
     private var floatingWindowOn = true
     // 默认禁掉支付宝，和"用户在设置里添加了它"等价
     private var blockedApps = setOf("com.eg.android.AlipayGphone")
+    private var checkedInSystem = false
     private val tool: Tool = buildPhoneUseTool(
         ownPackageName = "me.rerere.rikkahub",
         manager = manager,
         saveScreenshot = { "file:///screenshot.jpg" },
         isFloatingWindowOn = { floatingWindowOn },
         blockedApps = { blockedApps },
+        isCheckedInSystem = { checkedInSystem },
         isSelfInForeground = { selfInForeground },
     )
 
@@ -43,6 +47,23 @@ class PhoneUseToolTest {
     fun `fails with guidance when the accessibility service is off`() = runTest {
         val error = runCatching { call { put("action", "observe") } }.exceptionOrNull()
         assertTrue(error!!.message!!.contains("not enabled"))
+    }
+
+    @Test
+    fun `explains a service stopped by the system while still checked in settings`() = runTest {
+        checkedInSystem = true
+        val error = runCatching { call { put("action", "observe") } }.exceptionOrNull()
+        assertTrue(error!!.message!!.contains("turn it off and on again"))
+    }
+
+    @Test
+    fun `waits for a service that is still connecting`() = runTest {
+        checkedInSystem = true
+        launch {
+            delay(500)
+            manager.attach(controller)
+        }
+        assertTrue(call { put("action", "observe") }.isNotEmpty())
     }
 
     @Test
