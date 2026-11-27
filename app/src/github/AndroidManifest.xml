@@ -13,6 +13,9 @@
   <!-- Phone Use 的 Shizuku 执行方式：由 Shizuku 授予 adb 级 shell 权限 -->
   <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
+  <!-- 通知设置里直接弹出「忽略电池优化」的系统对话框；Play 只允许特定类型的应用申请，Play 版改为打开系统的电池优化列表 -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
   <application>
     <!-- Shizuku 通过这个 provider 把 binder 交给本应用，包名后缀由 Shizuku 约定；
          INTERACT_ACROSS_USERS_FULL 是官方推荐，防止普通应用访问这个 provider -->
