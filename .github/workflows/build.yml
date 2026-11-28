@@ -60,6 +60,11 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
+      - name: Run search unit tests and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew :search:testDebugUnitTest :search:lintDebug --stacktrace
+
       - name: Build release APK
         env:
           # tag 构建时把 tag 名（去掉 v）当作 versionName，和 release 版本对上，应用内更新才能比出版本差
