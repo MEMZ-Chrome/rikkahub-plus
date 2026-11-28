@@ -71,6 +71,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
                 is SearchServiceOptions.SerperOptions -> SerperSearchService
                 is SearchServiceOptions.DeepSeekOptions -> DeepSeekSearchService
+                is SearchServiceOptions.DeepSeekWebOptions -> DeepSeekWebSearchService
                 is SearchServiceOptions.CustomJsOptions -> CustomJsSearchService
             } as SearchService<T>
         }
@@ -177,6 +178,7 @@ sealed class SearchServiceOptions {
             TinyfishOptions::class to "Tinyfish",
             SerperOptions::class to "Serper",
             DeepSeekOptions::class to "DeepSeek",
+            DeepSeekWebOptions::class to "DeepSeek Web",
             CustomJsOptions::class to "Custom JS",
         )
 
@@ -201,6 +203,7 @@ sealed class SearchServiceOptions {
             TinyfishOptions::class to { TinyfishOptions() },
             SerperOptions::class to { SerperOptions() },
             DeepSeekOptions::class to { DeepSeekOptions() },
+            DeepSeekWebOptions::class to { DeepSeekWebOptions() },
             CustomJsOptions::class to { CustomJsOptions() },
         )
     }
@@ -353,6 +356,24 @@ sealed class SearchServiceOptions {
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
     ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("deepseek_web")
+    data class DeepSeekWebOptions(
+        override val id: Uuid = Uuid.random(),
+        val token: String = "",
+        val cookies: String = "",
+        val deepSearch: Boolean = false,
+        val minIntervalSeconds: Int = DEFAULT_MIN_INTERVAL_SECONDS,
+        val maxRequestsPerHour: Int = DEFAULT_MAX_REQUESTS_PER_HOUR,
+        val customPrompt: String = "",
+    ) : SearchServiceOptions() {
+        companion object {
+            const val DEFAULT_MIN_INTERVAL_SECONDS = 10
+            const val DEFAULT_MAX_REQUESTS_PER_HOUR = 30
+            const val MAX_CUSTOM_PROMPT_LENGTH = 120
+        }
+    }
 
     @Serializable
     @SerialName("custom_js")
