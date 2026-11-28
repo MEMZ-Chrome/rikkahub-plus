@@ -414,7 +414,7 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
         put("thinking_enabled", thinkingEnabled)
         put("search_enabled", true)
         put("action", JsonNull)
-        put("source", "input")
+        put("source", "default")
         put("preempt", false)
     }.toString()
 

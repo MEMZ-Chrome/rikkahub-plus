@@ -277,7 +277,7 @@ class DeepSeekWebSearchServiceTest {
             assertEquals("DeepSeek V3 release", payloadObj["prompt"]?.jsonPrimitive?.content)
             assertEquals(false, payloadObj["thinking_enabled"]?.jsonPrimitive?.boolean)
             assertEquals(true, payloadObj["search_enabled"]?.jsonPrimitive?.boolean)
-            assertEquals("input", payloadObj["source"]?.jsonPrimitive?.content)
+            assertEquals("default", payloadObj["source"]?.jsonPrimitive?.content)
 
             // Verify SearchResult mapping
             assertNull(result.answer)
