@@ -15,6 +15,7 @@ import me.rerere.rikkahub.service.HomePromptManager
 import me.rerere.rikkahub.service.HomePromptRiveLoader
 import me.rerere.rikkahub.service.HomePromptService
 import me.rerere.rikkahub.service.MediaCreationService
+import me.rerere.rikkahub.service.StartupTaskManager
 import me.rerere.rikkahub.ui.floating.ChatFloatingWindows
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalSessionManager
 import me.rerere.rikkahub.utils.EmojiData
@@ -144,6 +145,16 @@ val appModule = module {
         BackgroundShellManager(
             context = get(),
             workspaceRepository = get(),
+        )
+    }
+
+    single {
+        StartupTaskManager(
+            context = get(),
+            appScope = get(),
+            settingsStore = get(),
+            workspaceRepository = get(),
+            json = get(),
         )
     }
 

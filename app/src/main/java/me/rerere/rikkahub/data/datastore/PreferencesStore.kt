@@ -190,6 +190,9 @@ class SettingsStore internal constructor(
         // 首页自定义短语
         val HOME_PROMPT_CONFIG = stringPreferencesKey("home_prompt_config")
 
+        // 启动任务
+        val STARTUP_TASKS_CONFIG = stringPreferencesKey("startup_tasks_config")
+
         // Uses the same DataStore singleton without starting settings flows or requiring Koin.
         internal suspend fun restoreBeforeInitialization(context: Context, settings: Settings, launchCount: Int) {
             require(!settings.init) { "Cannot restore uninitialized settings" }

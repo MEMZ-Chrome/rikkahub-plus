@@ -182,6 +182,9 @@ internal val SETTINGS_FIELDS: List<SettingsField<*, *>> = with(SettingsStore) {
 
         // 首页自定义短语
         json(HOME_PROMPT_CONFIG, Settings::homePromptConfig) { copy(homePromptConfig = it) },
+
+        // 启动任务
+        json(STARTUP_TASKS_CONFIG, Settings::startupTasksConfig) { copy(startupTasksConfig = it) },
     )
 }
 

@@ -20,6 +20,7 @@ import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.WorkspaceStorageMount
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.BackgroundShellManager
+import me.rerere.rikkahub.service.StartupTaskManager
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceCommandResult
@@ -34,6 +35,7 @@ class WorkspaceDetailVM(
     private val repository: WorkspaceRepository,
     private val terminalSessionManager: WorkspaceTerminalSessionManager,
     private val backgroundShellManager: BackgroundShellManager,
+    private val startupTaskManager: StartupTaskManager,
 ) : ViewModel() {
     private val _state = MutableStateFlow(WorkspaceDetailState())
     val state = _state.asStateFlow()
@@ -318,6 +320,7 @@ class WorkspaceDetailVM(
             try {
                 terminalSessionManager.closeWorkspace(workspace.root)
                 backgroundShellManager.killWorkspace(workspace.id)
+                startupTaskManager.killWorkspace(workspace.id)
                 repository.installRootfs(workspace.id, url) { progress ->
                     _installProgress.value = progress
                 }

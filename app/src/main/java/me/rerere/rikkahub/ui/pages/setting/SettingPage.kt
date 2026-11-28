@@ -52,6 +52,7 @@ import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Clapping01
+import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.Image02
@@ -228,6 +229,18 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { CardGroupIcon(HugeIcons.Package, containerColor = containerColor, contentColor = contentColor) },
                         supportingContent = { Text(stringResource(R.string.setting_page_extensions_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_extensions)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingStartupTasks) },
+                        leadingContent = {
+                            CardGroupIcon(
+                                HugeIcons.ComputerTerminal01,
+                                containerColor = containerColor,
+                                contentColor = contentColor,
+                            )
+                        },
+                        supportingContent = { Text(stringResource(R.string.setting_page_startup_tasks_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_startup_tasks)) },
                     )
                 }
             }

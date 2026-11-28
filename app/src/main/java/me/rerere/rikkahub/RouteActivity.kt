@@ -133,6 +133,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMediaPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMediaProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
+import me.rerere.rikkahub.ui.pages.setting.SettingStartupTasksPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.quickstart.QuickStartPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
@@ -151,12 +152,20 @@ private const val TAG = "RouteActivity"
 private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
 private const val ACTION_MEDIA_CREATION = "me.rerere.rikkahub.action.MEDIA_CREATION"
 private const val EXTRA_CONVERSATION_ID = "conversationId"
+private const val EXTRA_OPEN_STARTUP_TASKS = "openStartupTasks"
 
 /** 打开指定会话的聊天页 */
 fun conversationIntent(context: Context, conversationId: String): Intent =
     Intent(context, RouteActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         putExtra(EXTRA_CONVERSATION_ID, conversationId)
+    }
+
+/** 打开启动任务设置页 */
+fun startupTasksIntent(context: Context): Intent =
+    Intent(context, RouteActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        putExtra(EXTRA_OPEN_STARTUP_TASKS, true)
     }
 
 class RouteActivity : ComponentActivity() {
@@ -253,6 +262,7 @@ class RouteActivity : ComponentActivity() {
             )
             else -> mediaCreationDestination(intent)
                 ?: intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { Screen.Chat(it) }
+                ?: Screen.SettingStartupTasks.takeIf { intent.getBooleanExtra(EXTRA_OPEN_STARTUP_TASKS, false) }
         }
         if (destination != null && backStack.lastOrNull() != destination) {
             backStack.add(destination)
@@ -547,6 +557,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingWebPage()
                             }
 
+                            entry<Screen.SettingStartupTasks> {
+                                SettingStartupTasksPage()
+                            }
+
                             entry<Screen.Debug> {
                                 DebugPage()
                             }
@@ -798,6 +812,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingWeb : Screen
+
+    @Serializable
+    data object SettingStartupTasks : Screen
 
     @Serializable
     data object Debug : Screen

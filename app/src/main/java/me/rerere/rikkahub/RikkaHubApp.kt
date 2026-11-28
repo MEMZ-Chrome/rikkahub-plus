@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +41,7 @@ import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.service.HomePromptManager
 import me.rerere.rikkahub.service.MediaCreationService
+import me.rerere.rikkahub.service.StartupTaskManager
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
@@ -96,11 +98,8 @@ class RikkaHubApp : Application() {
         // cleanup stale tool output files
         cleanupToolOutputs()
 
-        // cleanup workspace temp dirs (proot + rootfs /tmp)
-        cleanupWorkspaceTempDirs()
-
-        // check workspace integrity (mark workspaces with missing files as broken after backup restore)
-        checkWorkspaceIntegrity()
+        // cleanup workspace temp dirs, check workspace integrity, then run configured startup tasks
+        initializeWorkspacesAndStartupTasks()
 
         // sync upload files to DB
         syncManagedFiles()
@@ -176,22 +175,45 @@ class RikkaHubApp : Application() {
         }
     }
 
-    private fun cleanupWorkspaceTempDirs() {
+    private fun initializeWorkspacesAndStartupTasks() {
+        val startupTaskManager = get<StartupTaskManager>()
+        val foregroundReady = CompletableDeferred<Unit>()
+        val lifecycle = ProcessLifecycleOwner.get().lifecycle
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            foregroundReady.complete(Unit)
+        }
+        lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_START) {
+                    if (!foregroundReady.isCompleted) {
+                        foregroundReady.complete(Unit)
+                    } else {
+                        startupTaskManager.onAppForeground()
+                    }
+                }
+            }
+        )
         get<AppScope>().launch(Dispatchers.IO) {
             runCatching {
                 get<WorkspaceManager>().cleanupAllTempDirs()
             }.onFailure {
                 Log.e(TAG, "cleanupWorkspaceTempDirs failed", it)
             }
-        }
-    }
-
-    private fun checkWorkspaceIntegrity() {
-        get<AppScope>().launch(Dispatchers.IO) {
             runCatching {
                 get<WorkspaceRepository>().checkIntegrity()
             }.onFailure {
                 Log.e(TAG, "checkWorkspaceIntegrity failed", it)
+            }
+            // 等应用真正进入前台后再触发启动任务：避免后台唤醒误消耗每日首次，也满足前台服务启动条件
+            foregroundReady.await()
+            if (CrashHandler.hasCrashed(this@RikkaHubApp)) {
+                Log.w(TAG, "Safe mode pending after crash, skipping startup tasks")
+                return@launch
+            }
+            runCatching {
+                startupTaskManager.runOnAppStartup()
+            }.onFailure {
+                Log.e(TAG, "runOnAppStartup failed", it)
             }
         }
     }

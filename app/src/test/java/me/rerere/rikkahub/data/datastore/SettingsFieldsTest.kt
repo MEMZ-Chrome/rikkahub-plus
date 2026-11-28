@@ -169,6 +169,17 @@ private val SAMPLE = Settings(
     backupReminderConfig = BackupReminderConfig(enabled = true),
     sponsorAlertDismissedAt = 7,
     homePromptConfig = HomePromptConfig(enabled = true, script = "function getHomePrompt() { return null; }"),
+    startupTasksConfig = StartupTasksConfig(
+        defaultWorkspaceId = "workspace-1",
+        tasks = listOf(
+            StartupTask(
+                id = "task-1",
+                name = "Start MCP",
+                command = "echo hello",
+                trigger = StartupTaskTrigger.DAILY_FIRST_LAUNCH,
+            )
+        ),
+    ),
 )
 
 private val STORED_KEYS = setOf(
@@ -225,4 +236,5 @@ private val STORED_KEYS = setOf(
     "backup_reminder_config",
     "sponsor_alert_dismissed_at",
     "home_prompt_config",
+    "startup_tasks_config",
 )

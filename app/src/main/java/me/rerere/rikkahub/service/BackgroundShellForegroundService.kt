@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.conversationIntent
+import me.rerere.rikkahub.startupTasksIntent
 import kotlin.uuid.Uuid
 
 private const val TAG = "BackgroundShellFgs"
@@ -32,11 +33,11 @@ class BackgroundShellForegroundService : Service() {
 
         const val NOTIFICATION_ID = 2005
 
-        fun acquire(context: Context, taskId: String, conversationId: Uuid): Boolean {
+        fun acquire(context: Context, taskId: String, conversationId: Uuid? = null): Boolean {
             val intent = Intent(context, BackgroundShellForegroundService::class.java).apply {
                 action = ACTION_ACQUIRE
                 putExtra(EXTRA_TASK_ID, taskId)
-                putExtra(EXTRA_CONVERSATION_ID, conversationId.toString())
+                conversationId?.let { putExtra(EXTRA_CONVERSATION_ID, it.toString()) }
             }
             return runCatching {
                 ContextCompat.startForegroundService(context, intent)
@@ -59,8 +60,8 @@ class BackgroundShellForegroundService : Service() {
         }
     }
 
-    // 任务 ID -> 会话 ID
-    private val activeTasks = linkedMapOf<String, String>()
+    // 任务 ID -> 会话 ID（启动任务不归属会话，值为 null）
+    private val activeTasks = linkedMapOf<String, String?>()
     private var isForeground = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -96,7 +97,7 @@ class BackgroundShellForegroundService : Service() {
 
     private fun acquire(intent: Intent, startId: Int) {
         val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return stopSelf(startId)
-        val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: return stopSelf(startId)
+        val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID)
         activeTasks[taskId] = conversationId
         updateForegroundNotification()
     }
@@ -137,17 +138,22 @@ class BackgroundShellForegroundService : Service() {
             .setSmallIcon(R.drawable.ic_stat_rikkahub)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.notification_background_shell_running, activeTasks.size))
-            .setContentIntent(getConversationPendingIntent(activeTasks.values.last()))
+            .setContentIntent(getContentPendingIntent(activeTasks.values.lastOrNull()))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
 
-    private fun getConversationPendingIntent(conversationId: String): PendingIntent {
+    private fun getContentPendingIntent(conversationId: String?): PendingIntent {
+        val intent = if (conversationId != null) {
+            conversationIntent(this, conversationId)
+        } else {
+            startupTasksIntent(this)
+        }
         return PendingIntent.getActivity(
             this,
             NOTIFICATION_ID,
-            conversationIntent(this, conversationId),
+            intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
     }

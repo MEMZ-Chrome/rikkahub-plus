@@ -406,7 +406,12 @@ class WorkspaceRepository(
                     } else {
                         assistant
                     }
-                }
+                },
+                startupTasksConfig = if (settings.startupTasksConfig.defaultWorkspaceId == workspaceId) {
+                    settings.startupTasksConfig.copy(defaultWorkspaceId = null)
+                } else {
+                    settings.startupTasksConfig
+                },
             )
         }
     }

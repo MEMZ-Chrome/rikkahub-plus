@@ -93,6 +93,8 @@ data class Settings(
     val phoneUseBackend: PhoneUseBackend = PhoneUseBackend.ACCESSIBILITY,
     // 首页空对话正中心展示的小图、短语及点击填入的提示词（通过自定义 JS 获取）
     val homePromptConfig: HomePromptConfig = HomePromptConfig(),
+    // 应用启动时在工作区中自动执行的任务配置（默认工作区与任务列表）
+    val startupTasksConfig: StartupTasksConfig = StartupTasksConfig(),
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
@@ -247,3 +249,42 @@ function getHomePrompt() {
 }"""
     }
 }
+
+@Serializable
+data class StartupTasksConfig(
+    /** 未单独指定工作区的任务默认在此工作区中执行 */
+    val defaultWorkspaceId: String? = null,
+    val tasks: List<StartupTask> = emptyList(),
+)
+
+@Serializable
+enum class StartupTaskTrigger {
+    /** 每次冷启动应用时执行 */
+    @SerialName("every_launch")
+    EVERY_LAUNCH,
+
+    /** 每天首次启动应用时执行 */
+    @SerialName("daily_first_launch")
+    DAILY_FIRST_LAUNCH,
+
+    /** 每周首次启动应用时执行 */
+    @SerialName("weekly_first_launch")
+    WEEKLY_FIRST_LAUNCH,
+
+    /** 仅在下次启动应用时自动执行一次 */
+    @SerialName("once")
+    ONCE,
+}
+
+@Serializable
+data class StartupTask(
+    val id: String = Uuid.random().toString(),
+    val name: String = "",
+    val command: String = "",
+    val trigger: StartupTaskTrigger = StartupTaskTrigger.EVERY_LAUNCH,
+    val enabled: Boolean = true,
+    /** 为空时跟随 [StartupTasksConfig.defaultWorkspaceId] */
+    val workspaceId: String? = null,
+    /** 相对工作区文件区的执行目录，留空为根目录 */
+    val cwd: String = "",
+)

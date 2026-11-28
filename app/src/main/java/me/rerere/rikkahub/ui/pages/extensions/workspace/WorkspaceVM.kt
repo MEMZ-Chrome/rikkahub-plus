@@ -12,12 +12,14 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.BackgroundShellManager
+import me.rerere.rikkahub.service.StartupTaskManager
 import me.rerere.workspace.RootfsInstallProgress
 
 class WorkspaceVM(
     private val repository: WorkspaceRepository,
     private val terminalSessionManager: WorkspaceTerminalSessionManager,
     private val backgroundShellManager: BackgroundShellManager,
+    private val startupTaskManager: StartupTaskManager,
 ) : ViewModel() {
     val workspaces = repository.listFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -38,6 +40,7 @@ class WorkspaceVM(
         viewModelScope.launch {
             terminalSessionManager.closeWorkspace(workspace.root)
             backgroundShellManager.killWorkspace(workspace.id)
+            startupTaskManager.killWorkspace(workspace.id)
             repository.delete(workspace.id)
         }
     }
