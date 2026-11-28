@@ -764,6 +764,23 @@ internal fun DeepSeekWebOptions(
 
     FormItem(
         label = {
+            Text("搜索后自动删除会话")
+        },
+        description = {
+            Text("默认关闭（强烈推荐）。与真实浏览器一致保留历史记录；频繁新建后立刻删会话容易触发官方风控")
+        },
+        tail = {
+            Switch(
+                checked = options.deleteSessionAfterSearch,
+                onCheckedChange = { checked ->
+                    onUpdateOptions(options.copy(deleteSessionAfterSearch = checked))
+                }
+            )
+        }
+    )
+
+    FormItem(
+        label = {
             Text("最小请求间隔（秒）")
         },
         description = {
@@ -845,6 +862,8 @@ private fun DeepSeekWebLoginDialog(
     val webViewState = rememberWebViewState(
         url = "https://chat.deepseek.com",
         settings = {
+            // Keep login WebView UA identical to API requests so cf_clearance / WAF cookies remain bound to the same UA
+            userAgentString = DeepSeekWebSearchService.BROWSER_USER_AGENT
             javaScriptEnabled = true
             domStorageEnabled = true
             useWideViewPort = true

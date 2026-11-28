@@ -48,6 +48,7 @@ import okio.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
+import kotlin.random.Random
 
 private const val HIF_LEIM_URL = "https://hif-leim.deepseek.com/query"
 private const val HIF_DLIQ_URL = "https://hif-dliq.deepseek.com/query"
@@ -68,9 +69,16 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
     private const val API_BASE = "$BASE_ORIGIN/api/v0"
     private const val COMPLETION_TARGET_PATH = "/api/v0/chat/completion"
 
-    private const val USER_AGENT = "DeepSeek/2.5.0 Android/35"
-    private const val CLIENT_VERSION = "2.5.0"
-    private const val CLIENT_PLATFORM = "android"
+    // Aligned verbatim with deepseek-web2api-free/adapter.py desktop Chrome Web identity
+    const val BROWSER_USER_AGENT =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+            "AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/131.0.0.0 Safari/537.36"
+    private const val SEC_CH_UA =
+        "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\""
+    private const val ACCEPT_LANGUAGE = "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+    private const val CLIENT_VERSION = "2.3.0"
+    private const val CLIENT_PLATFORM = "web"
     private const val CLIENT_LOCALE = "zh_CN"
     private const val CLIENT_BUNDLE_ID = "com.deepseek.chat"
     private const val CLIENT_TIMEZONE_OFFSET = "28800"
@@ -86,6 +94,8 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
 
     internal val rateLimiter = DeepSeekRateLimiter()
     internal val hifCache = DeepSeekHifCache()
+    @Volatile
+    internal var jitterRangeMs: LongRange = 300L..800L
     private val cookieJars = ConcurrentHashMap<String, DeepSeekCookieJar>()
 
     @Composable
@@ -145,21 +155,22 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
                 error("搜索内容不能为空")
             }
 
-            val deviceId = deriveDeviceId(token)
-            val client = clientFor(token, serviceOptions.cookies)
-            val baseHeaders = buildCommonHeaders(token = token, deviceId = deviceId, includeAuth = true)
+            val accountKey = deriveAccountKey(token)
+            val client = clientFor(accountKey, serviceOptions.cookies)
+            val baseHeaders = buildCommonHeaders(token = token, includeAuth = true, crossSite = false)
 
             rateLimiter.withRateLimit(
-                accountKey = deviceId,
+                accountKey = accountKey,
                 minIntervalSeconds = serviceOptions.minIntervalSeconds.coerceAtLeast(0),
                 maxRequestsPerHour = serviceOptions.maxRequestsPerHour.coerceAtLeast(0),
             ) {
                 executeSearchFlow(
                     client = client,
                     baseHeaders = baseHeaders,
-                    deviceId = deviceId,
+                    accountKey = accountKey,
                     prompt = prompt,
                     deepSearch = serviceOptions.deepSearch,
+                    deleteSessionAfterSearch = serviceOptions.deleteSessionAfterSearch,
                     resultSize = commonOptions.resultSize,
                 )
             }
@@ -176,9 +187,10 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
     private suspend fun executeSearchFlow(
         client: OkHttpClient,
         baseHeaders: Map<String, String>,
-        deviceId: String,
+        accountKey: String,
         prompt: String,
         deepSearch: Boolean,
+        deleteSessionAfterSearch: Boolean,
         resultSize: Int,
     ): SearchResult {
         val sessionId = createSession(client, baseHeaders)
@@ -186,6 +198,7 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
         var finishedNormally = false
 
         try {
+            applyNaturalJitter()
             val challenge = createPowChallenge(client, baseHeaders)
             val powHeader = withContext(Dispatchers.Default) {
                 val answer = DeepSeekHashV1.solve(
@@ -206,11 +219,12 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
             }
 
             val hifHeaders = hifCache.getHeaders(
-                deviceId = deviceId,
+                accountKey = accountKey,
                 client = client,
-                commonHeaders = buildCommonHeaders(token = null, deviceId = deviceId, includeAuth = false),
+                commonHeaders = buildCommonHeaders(token = null, includeAuth = false, crossSite = true),
             )
 
+            applyNaturalJitter()
             streamCompletion(
                 client = client,
                 baseHeaders = baseHeaders,
@@ -230,8 +244,10 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
                         stopStream(client, baseHeaders, sessionId, msgId)
                     }
                 }
-                runCatching {
-                    deleteSession(client, baseHeaders, sessionId)
+                if (deleteSessionAfterSearch) {
+                    runCatching {
+                        deleteSession(client, baseHeaders, sessionId)
+                    }
                 }
             }
         }
@@ -241,6 +257,18 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
             sources = parser.sources,
             resultSize = resultSize,
         )
+    }
+
+    private suspend fun applyNaturalJitter() {
+        val range = jitterRangeMs
+        if (range.last > 0L && range.last >= range.first) {
+            val ms = if (range.first == range.last) {
+                range.first
+            } else {
+                Random.nextLong(range.first.coerceAtLeast(0L), range.last + 1L)
+            }
+            if (ms > 0L) delay(ms)
+        }
     }
 
     private suspend fun createSession(
@@ -327,7 +355,7 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
         )
         val mergedHeaders = LinkedHashMap<String, String>(baseHeaders.size + hifHeaders.size + 1).apply {
             putAll(baseHeaders)
-            put("X-Ds-Pow-Response", powHeader)
+            put("X-DS-PoW-Response", powHeader)
             putAll(hifHeaders)
         }
         val request = buildPostRequest(
@@ -401,6 +429,9 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
         client.newCall(request).awaitCancellable().closeQuietly()
     }
 
+    /**
+     * Completion payload aligned verbatim with `deepseek-web2api-free/adapter.py`.
+     */
     internal fun buildCompletionPayload(
         sessionId: String,
         prompt: String,
@@ -411,32 +442,41 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
         put("model_type", "default")
         put("prompt", prompt)
         put("ref_file_ids", JsonArray(emptyList()))
+        put("stream", true)
         put("thinking_enabled", thinkingEnabled)
         put("search_enabled", true)
-        put("action", JsonNull)
-        put("source", "default")
         put("preempt", false)
     }.toString()
 
+    /**
+     * Browser fetch() headers aligned verbatim with `deepseek-web2api-free/adapter.py`.
+     * No fabricated `X-Device-Id` / `X-Device-Model` headers are sent.
+     */
     internal fun buildCommonHeaders(
         token: String?,
-        deviceId: String,
         includeAuth: Boolean,
+        crossSite: Boolean = false,
     ): Map<String, String> = buildMap {
-        put("User-Agent", USER_AGENT)
+        put("User-Agent", BROWSER_USER_AGENT)
+        put("Accept", "*/*")
+        put("Accept-Language", ACCEPT_LANGUAGE)
         if (includeAuth && !token.isNullOrBlank()) {
             put("Authorization", "Bearer $token")
         }
-        put("Accept", "*/*")
         put("Origin", BASE_ORIGIN)
         put("Referer", "$BASE_ORIGIN/")
+        put("Priority", "u=1, i")
+        put("Sec-Ch-Ua", SEC_CH_UA)
+        put("Sec-Ch-Ua-Mobile", "?0")
+        put("Sec-Ch-Ua-Platform", "\"Windows\"")
+        put("Sec-Fetch-Dest", "empty")
+        put("Sec-Fetch-Mode", "cors")
+        put("Sec-Fetch-Site", if (crossSite) "cross-site" else "same-origin")
         put("X-Client-Version", CLIENT_VERSION)
         put("X-Client-Platform", CLIENT_PLATFORM)
         put("X-Client-Locale", CLIENT_LOCALE)
-        put("X-Client-Bundle-Id", CLIENT_BUNDLE_ID)
         put("X-Client-Timezone-Offset", CLIENT_TIMEZONE_OFFSET)
-        put("X-Device-Id", deviceId)
-        put("X-Device-Model", "")
+        put("x-client-bundle-id", CLIENT_BUNDLE_ID)
     }
 
     /**
@@ -508,11 +548,11 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
     }
 
     /**
-     * Deterministically derives a stable RFC 4122 UUIDv4 from [token],
-     * matching `ds_core/src/accounts/client.rs` (`derive_device_uuid`).
+     * Deterministically derives a local per-account bucket key (for rate limiting, HIF cache,
+     * and cookie jar isolation). Never sent over the network.
      */
-    internal fun deriveDeviceId(token: String): String {
-        val seed = "rikkahub:deepseek:x-device-id:$token".encodeToByteArray()
+    internal fun deriveAccountKey(token: String): String {
+        val seed = "rikkahub:deepseek:account:$token".encodeToByteArray()
         val hi = fnv1a64(seed, 0L)
         val lo = fnv1a64(seed, 0x9e3779b97f4a7c15UL.toLong())
         val bytes = ByteArray(16)
@@ -588,13 +628,21 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
         )
     }
 
-    private fun clientFor(token: String, cookiesSeed: String): OkHttpClient {
-        val jarKey = "${deriveDeviceId(token)}:${cookiesSeed.hashCode()}"
+    private fun clientFor(accountKey: String, cookiesSeed: String): OkHttpClient {
+        val jarKey = "$accountKey:${cookiesSeed.hashCode()}"
         val jar = cookieJars.getOrCreate(jarKey) {
             DeepSeekCookieJar(cookiesSeed)
         }
         return httpClient.newBuilder()
             .cookieJar(jar)
+            // RikkaHub's shared OkHttpClient unconditionally adds an Accept-Language header in an
+            // application interceptor; normalize to a single browser-consistent header on the wire.
+            .addNetworkInterceptor { chain ->
+                val req = chain.request().newBuilder()
+                    .header("Accept-Language", ACCEPT_LANGUAGE)
+                    .build()
+                chain.proceed(req)
+            }
             .build()
     }
 
@@ -787,7 +835,7 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
         private val endpoints = ConcurrentHashMap<String, EndpointState>()
 
         suspend fun getHeaders(
-            deviceId: String,
+            accountKey: String,
             client: OkHttpClient,
             commonHeaders: Map<String, String>,
         ): Map<String, String> = coroutineScope {
@@ -798,10 +846,10 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
                 .build()
 
             val leimDeferred = async {
-                fetchToken("$deviceId:leim", leimUrl, shortClient, commonHeaders)
+                fetchToken("$accountKey:leim", leimUrl, shortClient, commonHeaders)
             }
             val dliqDeferred = async {
-                fetchToken("$deviceId:dliq", dliqUrl, shortClient, commonHeaders)
+                fetchToken("$accountKey:dliq", dliqUrl, shortClient, commonHeaders)
             }
 
             val leim = leimDeferred.await()

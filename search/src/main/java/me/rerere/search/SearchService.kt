@@ -364,6 +364,7 @@ sealed class SearchServiceOptions {
         val token: String = "",
         val cookies: String = "",
         val deepSearch: Boolean = false,
+        val deleteSessionAfterSearch: Boolean = false,
         val minIntervalSeconds: Int = DEFAULT_MIN_INTERVAL_SECONDS,
         val maxRequestsPerHour: Int = DEFAULT_MAX_REQUESTS_PER_HOUR,
         val customPrompt: String = "",

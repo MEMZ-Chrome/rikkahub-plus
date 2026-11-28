@@ -49,10 +49,10 @@ class DeepSeekWebSearchServiceTest {
     }
 
     @Test
-    fun `derives stable RFC 4122 UUIDv4 device id per token`() {
-        val idA1 = DeepSeekWebSearchService.deriveDeviceId("token-a")
-        val idA2 = DeepSeekWebSearchService.deriveDeviceId("token-a")
-        val idB = DeepSeekWebSearchService.deriveDeviceId("token-b")
+    fun `derives stable RFC 4122 UUIDv4 account key per token`() {
+        val idA1 = DeepSeekWebSearchService.deriveAccountKey("token-a")
+        val idA2 = DeepSeekWebSearchService.deriveAccountKey("token-a")
+        val idB = DeepSeekWebSearchService.deriveAccountKey("token-b")
 
         assertEquals(idA1, idA2)
         assertNotEquals(idA1, idB)
@@ -162,8 +162,10 @@ class DeepSeekWebSearchServiceTest {
 
     @OptIn(ExperimentalEncodingApi::class)
     @Test(timeout = 15_000)
-    fun `end to end search flow solves PoW attaches HIF maps results and deletes session`() = runBlocking {
+    fun `end to end search flow solves PoW attaches HIF maps results and keeps session by default`() = runBlocking {
         val previousClient = SearchService.httpClient
+        val previousJitter = DeepSeekWebSearchService.jitterRangeMs
+        DeepSeekWebSearchService.jitterRangeMs = 0L..0L
         DeepSeekWebSearchService.rateLimiter.clear()
         DeepSeekWebSearchService.hifCache.clear()
 
@@ -180,12 +182,17 @@ class DeepSeekWebSearchServiceTest {
 
             when {
                 urlStr == "https://chat.deepseek.com/api/v0/chat_session/create" -> {
-                    assertEquals("DeepSeek/2.5.0 Android/35", req.header("User-Agent"))
+                    assertEquals(DeepSeekWebSearchService.BROWSER_USER_AGENT, req.header("User-Agent"))
                     assertEquals("Bearer test-token-1", req.header("Authorization"))
-                    assertEquals("android", req.header("X-Client-Platform"))
-                    assertEquals("com.deepseek.chat", req.header("X-Client-Bundle-Id"))
+                    assertEquals("web", req.header("X-Client-Platform"))
+                    assertEquals("2.3.0", req.header("X-Client-Version"))
+                    assertEquals("com.deepseek.chat", req.header("x-client-bundle-id"))
                     assertEquals("28800", req.header("X-Client-Timezone-Offset"))
-                    assertNull(req.header("X-Ds-Pow-Response"))
+                    assertEquals("same-origin", req.header("Sec-Fetch-Site"))
+                    assertEquals("\"Windows\"", req.header("Sec-Ch-Ua-Platform"))
+                    assertNull("Should not send fabricated X-Device-Id", req.header("X-Device-Id"))
+                    assertNull("Should not send fabricated X-Device-Model", req.header("X-Device-Model"))
+                    assertNull(req.header("X-DS-PoW-Response"))
                     jsonResponse(
                         req,
                         """{"code":0,"msg":"","data":{"biz_code":0,"biz_msg":"","biz_data":{"chat_session":{"id":"sess-abc-123"}}}}""",
@@ -201,6 +208,8 @@ class DeepSeekWebSearchServiceTest {
 
                 urlStr == "https://hif-leim.deepseek.com/query" -> {
                     assertNull("HIF request must not carry Authorization", req.header("Authorization"))
+                    assertEquals("cross-site", req.header("Sec-Fetch-Site"))
+                    assertEquals(DeepSeekWebSearchService.BROWSER_USER_AGENT, req.header("User-Agent"))
                     jsonResponse(
                         req,
                         """{"code":0,"msg":"","data":{"biz_code":0,"biz_msg":"","biz_data":{"value":"LEIM-TOK-1"}}}""",
@@ -214,7 +223,7 @@ class DeepSeekWebSearchServiceTest {
                 }
 
                 urlStr == "https://chat.deepseek.com/api/v0/chat/completion" -> {
-                    capturedPowHeader = req.header("X-Ds-Pow-Response")
+                    capturedPowHeader = req.header("X-DS-PoW-Response")
                     capturedHifLeim = req.header("X-Hif-Leim")
                     capturedHifDliq = req.header("X-Hif-Dliq")
                     capturedCompletionBody = Buffer().also { req.body!!.writeTo(it) }.readUtf8()
@@ -271,16 +280,18 @@ class DeepSeekWebSearchServiceTest {
             assertEquals("LEIM-TOK-1", capturedHifLeim)
             assertNull(capturedHifDliq)
 
-            // Verify completion payload shape
+            // Verify completion payload aligns with deepseek-web2api-free/adapter.py
             val payloadObj = SearchService.json.parseToJsonElement(capturedCompletionBody!!) as JsonObject
             assertEquals("sess-abc-123", payloadObj["chat_session_id"]?.jsonPrimitive?.content)
             assertEquals(JsonNull, payloadObj["parent_message_id"])
-            assertEquals(JsonNull, payloadObj["action"])
             assertEquals("default", payloadObj["model_type"]?.jsonPrimitive?.content)
             assertEquals("DeepSeek V3 release", payloadObj["prompt"]?.jsonPrimitive?.content)
+            assertEquals(true, payloadObj["stream"]?.jsonPrimitive?.boolean)
             assertEquals(false, payloadObj["thinking_enabled"]?.jsonPrimitive?.boolean)
             assertEquals(true, payloadObj["search_enabled"]?.jsonPrimitive?.boolean)
-            assertEquals("default", payloadObj["source"]?.jsonPrimitive?.content)
+            assertEquals(false, payloadObj["preempt"]?.jsonPrimitive?.boolean)
+            assertNull(payloadObj["source"])
+            assertNull(payloadObj["action"])
 
             // Verify SearchResult mapping
             assertNull(result.answer)
@@ -292,17 +303,20 @@ class DeepSeekWebSearchServiceTest {
             assertEquals("https://example.com/a", result.items[1].url)
             assertEquals("Snippet A", result.items[1].text)
 
-            // Verify session cleanup happened and stop_stream was NOT needed on normal completion
-            assertTrue(calledEndpoints.contains("https://chat.deepseek.com/api/v0/chat_session/delete"))
+            // By default (deleteSessionAfterSearch = false), do NOT immediately delete session
+            assertFalse(calledEndpoints.contains("https://chat.deepseek.com/api/v0/chat_session/delete"))
             assertFalse(calledEndpoints.contains("https://chat.deepseek.com/api/v0/chat/stop_stream"))
         } finally {
+            DeepSeekWebSearchService.jitterRangeMs = previousJitter
             SearchService.httpClient = previousClient
         }
     }
 
     @Test(timeout = 15_000)
-    fun `stream failure calls stop_stream and delete_session without masking original error`() = runBlocking {
+    fun `stream failure calls stop_stream and optional delete_session without masking original error`() = runBlocking {
         val previousClient = SearchService.httpClient
+        val previousJitter = DeepSeekWebSearchService.jitterRangeMs
+        DeepSeekWebSearchService.jitterRangeMs = 0L..0L
         DeepSeekWebSearchService.rateLimiter.clear()
         DeepSeekWebSearchService.hifCache.clear()
 
@@ -365,6 +379,7 @@ class DeepSeekWebSearchServiceTest {
                 commonOptions = SearchCommonOptions(),
                 serviceOptions = SearchServiceOptions.DeepSeekWebOptions(
                     token = "token-err-case",
+                    deleteSessionAfterSearch = true,
                     minIntervalSeconds = 0,
                     maxRequestsPerHour = 0,
                 ),
@@ -376,6 +391,7 @@ class DeepSeekWebSearchServiceTest {
             assertTrue(stopStreamBody.orEmpty().contains("sess-err-99"))
             assertTrue(stopStreamBody.orEmpty().contains("88"))
         } finally {
+            DeepSeekWebSearchService.jitterRangeMs = previousJitter
             SearchService.httpClient = previousClient
         }
     }
