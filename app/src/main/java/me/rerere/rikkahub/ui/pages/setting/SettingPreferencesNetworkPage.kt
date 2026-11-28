@@ -56,6 +56,10 @@ import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.UiState
+import me.rerere.rikkahub.utils.UpdateChecker
+import me.rerere.rikkahub.utils.applyGithubProxy
+import me.rerere.rikkahub.utils.normalizeUpdateProxyDomain
 import me.rerere.rikkahub.utils.plus
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -67,9 +71,13 @@ private const val PROXY_TEST_URL = "https://www.google.com/generate_204"
 @Composable
 fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
     val httpClient = koinInject<OkHttpClient>()
+    val updateChecker = koinInject<UpdateChecker>()
     val settings by vm.settings.collectAsStateWithLifecycle()
     var userAgent by remember(settings.networkSetting.userAgent) {
         mutableStateOf(settings.networkSetting.userAgent)
+    }
+    var updateProxyDomain by remember(settings.networkSetting.updateProxyDomain) {
+        mutableStateOf(settings.networkSetting.updateProxyDomain)
     }
     var proxyUrl by remember(settings.networkSetting.proxyUrl) {
         mutableStateOf(settings.networkSetting.proxyUrl)
@@ -87,11 +95,21 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
     var proxyDialogVisible by remember { mutableStateOf(false) }
     val defaultUserAgent = "RikkaHub-Android/${BuildConfig.VERSION_NAME}"
     val proxyUrlInvalid = proxyUrlDraft.isNotBlank() && proxyUrlDraft.toProxyOrNull() == null
+    val updateProxyInvalid = updateProxyDomain.isNotBlank() &&
+        normalizeUpdateProxyDomain(updateProxyDomain) == null
+    val updateProxyPreview = remember(updateProxyDomain) {
+        if (updateProxyDomain.isBlank() || normalizeUpdateProxyDomain(updateProxyDomain) == null) {
+            null
+        } else {
+            applyGithubProxy("https://github.com/...", updateProxyDomain)
+        }
+    }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     val resources = LocalResources.current
     val toaster = LocalToaster.current
     var proxyTesting by remember { mutableStateOf(false) }
+    var updateProxyTesting by remember { mutableStateOf(false) }
 
     fun updateUserAgent(value: String) {
         userAgent = value
@@ -99,6 +117,51 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
             it.copy(
                 networkSetting = it.networkSetting.copy(userAgent = value),
             )
+        }
+    }
+
+    fun updateUpdateProxyDomain(value: String) {
+        updateProxyDomain = value
+        if (value.isBlank() || normalizeUpdateProxyDomain(value) != null) {
+            vm.updateSettings {
+                it.copy(
+                    networkSetting = it.networkSetting.copy(updateProxyDomain = value.trim()),
+                )
+            }
+        }
+    }
+
+    fun testUpdateProxy() {
+        if (updateProxyTesting || updateProxyInvalid) return
+        updateProxyTesting = true
+        val targetProxy = updateProxyDomain.trim()
+        scope.launch {
+            val result = updateChecker.checkUpdateOnce(targetProxy)
+            result.onSuccess { info ->
+                if (targetProxy == settings.networkSetting.updateProxyDomain.trim() &&
+                    updateChecker.updateState.value is UiState.Error
+                ) {
+                    updateChecker.refresh()
+                }
+                toaster.show(
+                    resources.getString(
+                        R.string.setting_page_preferences_network_update_proxy_test_success,
+                        info.version.removePrefix("v"),
+                    ),
+                    type = ToastType.Success,
+                )
+            }.onFailure { error ->
+                val reason = error.message?.takeIf { it.isNotBlank() }
+                    ?: error::class.simpleName.orEmpty()
+                toaster.show(
+                    resources.getString(
+                        R.string.backup_page_connection_failed,
+                        reason,
+                    ),
+                    type = ToastType.Error,
+                )
+            }
+            updateProxyTesting = false
         }
     }
 
@@ -379,6 +442,68 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
                             }
                         },
                     )
+                }
+            }
+            // Play 版由商店负责更新，不提供 GitHub 更新代理配置
+            if (!BuildConfig.IS_PLAY_STORE) {
+                item {
+                    CardGroup(
+                        title = {
+                            Text(stringResource(R.string.setting_page_preferences_network_update_proxy))
+                        },
+                    ) {
+                        formItem {
+                            OutlinedTextField(
+                                value = updateProxyDomain,
+                                onValueChange = ::updateUpdateProxyDomain,
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("https://ghfast.top/") },
+                                supportingText = {
+                                    Text(
+                                        when {
+                                            updateProxyInvalid -> stringResource(
+                                                R.string.setting_page_preferences_network_update_proxy_invalid,
+                                            )
+                                            updateProxyPreview != null -> stringResource(
+                                                R.string.setting_page_preferences_network_update_proxy_preview,
+                                                updateProxyPreview,
+                                            )
+                                            else -> stringResource(
+                                                R.string.setting_page_preferences_network_update_proxy_desc,
+                                            )
+                                        }
+                                    )
+                                },
+                                isError = updateProxyInvalid,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                                singleLine = true,
+                            )
+                            TextButton(
+                                onClick = { updateUpdateProxyDomain("") },
+                                modifier = Modifier.align(Alignment.End),
+                                enabled = updateProxyDomain.isNotEmpty(),
+                            ) {
+                                Text(stringResource(R.string.setting_model_page_reset_to_default))
+                            }
+                        }
+                        item(
+                            headlineContent = {
+                                Text(stringResource(R.string.setting_provider_page_test_connection))
+                            },
+                            trailingContent = {
+                                FilledTonalButton(
+                                    onClick = ::testUpdateProxy,
+                                    enabled = !updateProxyInvalid && !updateProxyTesting,
+                                ) {
+                                    if (updateProxyTesting) {
+                                        LoadingIndicator(modifier = Modifier.size(24.dp))
+                                    } else {
+                                        Text(stringResource(R.string.setting_provider_page_test))
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
