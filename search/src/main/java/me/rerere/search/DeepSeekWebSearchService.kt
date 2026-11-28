@@ -589,7 +589,7 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
 
     private fun clientFor(token: String, cookiesSeed: String): OkHttpClient {
         val jarKey = "${deriveDeviceId(token)}:${cookiesSeed.hashCode()}"
-        val jar = cookieJars.computeIfAbsent(jarKey) {
+        val jar = cookieJars.getOrCreate(jarKey) {
             DeepSeekCookieJar(cookiesSeed)
         }
         return httpClient.newBuilder()
@@ -698,7 +698,7 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
             maxRequestsPerHour: Int,
             block: suspend () -> T,
         ): T {
-            val bucket = buckets.computeIfAbsent(accountKey) { AccountBucket() }
+            val bucket = buckets.getOrCreate(accountKey) { AccountBucket() }
             return bucket.mutex.withLock {
                 val intervalMs = minIntervalSeconds.coerceAtLeast(0) * 1000L
                 val now = nowMillis()
@@ -821,7 +821,7 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
             client: OkHttpClient,
             commonHeaders: Map<String, String>,
         ): String? {
-            val state = endpoints.computeIfAbsent(key) { EndpointState() }
+            val state = endpoints.getOrCreate(key) { EndpointState() }
             return state.mutex.withLock {
                 val now = nowMillis()
                 val existing = state.cached
@@ -948,6 +948,16 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
         }
 
         private fun cookieKey(cookie: Cookie): String = "${cookie.domain}|${cookie.path}|${cookie.name}"
+    }
+}
+
+private inline fun <K : Any, V : Any> ConcurrentHashMap<K, V>.getOrCreate(
+    key: K,
+    create: () -> V,
+): V {
+    return this[key] ?: run {
+        val candidate = create()
+        putIfAbsent(key, candidate) ?: candidate
     }
 }
 
