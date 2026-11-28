@@ -135,8 +135,18 @@ class DeepSeekWebSearchServiceTest {
         assertEquals("seedval", initial["cf_clearance"])
         assertEquals("old", initial["ds_session"])
 
-        val rotated = Cookie.parse(url, "ds_session=fresh123; Domain=deepseek.com; Path=/")!!
-        val added = Cookie.parse(url, "aws-waf-token=waf999; Domain=chat.deepseek.com; Path=/")!!
+        val rotated = Cookie.Builder()
+            .name("ds_session")
+            .value("fresh123")
+            .domain("deepseek.com")
+            .path("/")
+            .build()
+        val added = Cookie.Builder()
+            .name("aws-waf-token")
+            .value("waf999")
+            .domain("chat.deepseek.com")
+            .path("/")
+            .build()
         jar.saveFromResponse(url, listOf(rotated, added))
 
         val updated = jar.loadForRequest(url)
