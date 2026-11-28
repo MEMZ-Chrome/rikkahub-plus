@@ -464,8 +464,9 @@ object DeepSeekWebSearchService : SearchService<SearchServiceOptions.DeepSeekWeb
 
         if (s.startsWith("{") && s.endsWith("}")) {
             val obj = runCatching { json.parseToJsonElement(s) as? JsonObject }.getOrNull()
-            val value = obj?.get("value")?.jsonPrimitive?.contentOrNull?.trim()
-            if (!value.isNullOrEmpty()) {
+            if (obj != null && "value" in obj) {
+                val value = (obj["value"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim().orEmpty()
+                if (value.isEmpty()) return ""
                 return if (value.startsWith("Bearer ", ignoreCase = true)) {
                     value.substring(7).trim()
                 } else {

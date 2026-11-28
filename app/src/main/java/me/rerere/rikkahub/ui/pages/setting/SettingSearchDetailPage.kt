@@ -43,7 +43,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,7 +57,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -701,7 +699,7 @@ internal fun DeepSeekWebOptions(
             modifier = Modifier.size(18.dp)
         )
         Spacer(Modifier.width(8.dp))
-        Text("网页登录 DeepSeek 并自动获取 Token")
+        Text("网页登录 DeepSeek 获取 Token")
     }
 
     FormItem(
@@ -854,10 +852,10 @@ private fun DeepSeekWebLoginDialog(
             setSupportMultipleWindows(false)
         },
     )
-    var statusText by remember { mutableStateOf("请登录 DeepSeek，登录成功后将自动提取 Token 与 Cookie") }
+    var statusText by remember { mutableStateOf("请先在下方网页完成 DeepSeek 登录，进入对话主界面后手动点击右上角「确认提取」") }
     var extracted by remember { mutableStateOf(false) }
 
-    fun tryExtract(manual: Boolean) {
+    fun extractManually() {
         val webView = webViewState.webView ?: return
         if (extracted) return
         webView.evaluateJavascript("localStorage.getItem('userToken')") { rawResult ->
@@ -875,20 +873,8 @@ private fun DeepSeekWebLoginDialog(
                     cookieManager.getCookie("https://deepseek.com"),
                 )
                 onCredentialsExtracted(token, cookies)
-            } else if (manual) {
-                statusText = "尚未检测到登录状态，请先完成 DeepSeek 登录后再点击提取"
-            }
-        }
-    }
-
-    LaunchedEffect(webViewState.webView, extracted) {
-        while (!extracted) {
-            delay(1500)
-            val currentUrl = webViewState.currentUrl.orEmpty()
-            if (currentUrl.contains("chat.deepseek.com", ignoreCase = true) &&
-                !currentUrl.contains("/sign_in", ignoreCase = true)
-            ) {
-                tryExtract(manual = false)
+            } else {
+                statusText = "未检测到有效登录 Token，请确认已完成 DeepSeek 登录并进入聊天主页后再点击「确认提取」"
             }
         }
     }
@@ -917,14 +903,14 @@ private fun DeepSeekWebLoginDialog(
                                     contentDescription = "刷新"
                                 )
                             }
-                            TextButton(onClick = { tryExtract(manual = true) }) {
+                            TextButton(onClick = { extractManually() }) {
                                 Icon(
                                     imageVector = HugeIcons.Tick02,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(Modifier.width(4.dp))
-                                Text("提取")
+                                Text("确认提取")
                             }
                         }
                     )

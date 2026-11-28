@@ -42,6 +42,9 @@ class DeepSeekWebSearchServiceTest {
             "raw-token-123",
             DeepSeekWebSearchService.normalizeToken(""""{\"value\":\"raw-token-123\",\"__version\":\"0\"}""""),
         )
+        assertEquals("", DeepSeekWebSearchService.normalizeToken("""{"value":"","__version":"0"}"""))
+        assertEquals("", DeepSeekWebSearchService.normalizeToken("""{"value":null,"__version":"0"}"""))
+        assertEquals("", DeepSeekWebSearchService.normalizeToken(""""{\"value\":\"\",\"__version\":\"0\"}""""))
         assertEquals("", DeepSeekWebSearchService.normalizeToken("   "))
     }
 
