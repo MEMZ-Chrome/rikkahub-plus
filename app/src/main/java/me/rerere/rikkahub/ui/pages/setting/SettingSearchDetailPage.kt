@@ -815,7 +815,52 @@ internal fun DeepSeekWebOptions(
 
     FormItem(
         label = {
-            Text("补充搜索说明（可选）")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "搜索工具提示词（发给主模型）",
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = {
+                        onUpdateOptions(
+                            options.copy(
+                                toolDescription = SearchServiceOptions.DeepSeekWebOptions.DEFAULT_TOOL_DESCRIPTION
+                            )
+                        )
+                    },
+                    enabled = options.toolDescription != SearchServiceOptions.DeepSeekWebOptions.DEFAULT_TOOL_DESCRIPTION,
+                ) {
+                    Text("恢复默认")
+                }
+            }
+        },
+        description = {
+            Text(
+                "仅对 DeepSeek Web 生效，用于指导主对话模型如何调用 search_web 与引用结果（不会发给 DeepSeek）。支持 ${SearchServiceOptions.DeepSeekWebOptions.DATE_PLACEHOLDER} 自动替换为今天日期，留空则回退系统默认。"
+            )
+        }
+    ) {
+        OutlinedTextField(
+            value = options.toolDescription,
+            onValueChange = { value ->
+                onUpdateOptions(options.copy(toolDescription = value))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 5,
+            maxLines = 12,
+            placeholder = {
+                Text("留空使用系统默认 search_web 工具描述")
+            }
+        )
+    }
+
+    FormItem(
+        label = {
+            Text("补充搜索说明（可选，发给 DeepSeek）")
         },
         description = {
             Text(

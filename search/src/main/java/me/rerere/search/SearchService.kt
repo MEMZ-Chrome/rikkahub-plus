@@ -368,11 +368,33 @@ sealed class SearchServiceOptions {
         val minIntervalSeconds: Int = DEFAULT_MIN_INTERVAL_SECONDS,
         val maxRequestsPerHour: Int = DEFAULT_MAX_REQUESTS_PER_HOUR,
         val customPrompt: String = "",
+        val toolDescription: String = DEFAULT_TOOL_DESCRIPTION,
     ) : SearchServiceOptions() {
         companion object {
             const val DEFAULT_MIN_INTERVAL_SECONDS = 10
             const val DEFAULT_MAX_REQUESTS_PER_HOUR = 30
             const val MAX_CUSTOM_PROMPT_LENGTH = 120
+            const val DATE_PLACEHOLDER = "{{date}}"
+            const val DEFAULT_TOOL_DESCRIPTION = """Search the web for up-to-date or specific information.
+Use this when the user asks for the latest news, current facts, or needs verification.
+This search tool automatically searches multiple pages, reads sources, and returns a synthesized summary together with verified source links.
+Prefer a single focused query or concise question rather than issuing multiple separate searches in one turn.
+Do not treat result order as proof of freshness. Inspect each result's title, URL, publication date, and content before making a current claim.
+Today is {{date}}.
+
+Response format:
+- retrievedAt is the local retrieval time, never a publication date
+- items[].id (short id), index, title, url, publishedDate (if supplied), highlights (if supplied), text
+- images[]: image urls related to the query (may be empty)
+
+Citations:
+- After using results, add `[citation,domain](id)` after the sentence.
+- Multiple citations are allowed.
+- If no results are cited, omit citations.
+
+Example:
+The capital of France is Paris. [citation,example.com](abc123)
+The population is about 2.1 million. [citation,example.com](abc123) [citation,example2.com](def456)"""
         }
     }
 

@@ -64,6 +64,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :search:testDebugUnitTest :search:lintDebug --stacktrace
+          ./gradlew :app:testGithubDebugUnitTest --tests "me.rerere.rikkahub.data.ai.tools.SearchToolsTest" --stacktrace
 
       - name: Build release APK
         env:

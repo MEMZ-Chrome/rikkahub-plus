@@ -37,4 +37,49 @@ class SearchToolsTest {
         assertEquals(listOf("url"), schema.required)
         assertTrue(schema.properties.containsKey("maxAgeHours"))
     }
+
+    @Test
+    fun `deepseek web search tool uses editable toolDescription with date placeholder`() {
+        val settings = Settings(
+            searchServices = listOf(
+                SearchServiceOptions.DeepSeekWebOptions(
+                    toolDescription = "Custom DeepSeek search instruction. Today is {{date}}."
+                )
+            ),
+            searchServiceSelected = 0,
+        )
+        val searchTool = createSearchTools(settings).single { it.name == "search_web" }
+
+        assertTrue(searchTool.description.startsWith("Custom DeepSeek search instruction. Today is "))
+        assertTrue(!searchTool.description.contains("{{date}}"))
+    }
+
+    @Test
+    fun `deepseek web blank toolDescription falls back to default search description`() {
+        val settings = Settings(
+            searchServices = listOf(
+                SearchServiceOptions.DeepSeekWebOptions(toolDescription = "   ")
+            ),
+            searchServiceSelected = 0,
+        )
+        val searchTool = createSearchTools(settings).single { it.name == "search_web" }
+
+        assertTrue(searchTool.description.contains("Search the web for up-to-date or specific information."))
+        assertTrue(searchTool.description.contains("Generate focused keywords and run multiple searches if needed."))
+    }
+
+    @Test
+    fun `non deepseek web search engine keeps standard default description`() {
+        val settings = Settings(
+            searchServices = listOf(
+                SearchServiceOptions.DeepSeekWebOptions(toolDescription = "Only for DeepSeek Web"),
+                SearchServiceOptions.ExaOptions(),
+            ),
+            searchServiceSelected = 1,
+        )
+        val searchTool = createSearchTools(settings).single { it.name == "search_web" }
+
+        assertTrue(searchTool.description.contains("Generate focused keywords and run multiple searches if needed."))
+        assertTrue(!searchTool.description.contains("Only for DeepSeek Web"))
+    }
 }
